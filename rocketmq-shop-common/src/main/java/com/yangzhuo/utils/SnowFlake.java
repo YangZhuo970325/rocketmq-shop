@@ -2,7 +2,6 @@ package com.yangzhuo.utils;
 
 import org.springframework.stereotype.Component;
 
-@Component
 public class SnowFlake {
 
     /**
@@ -91,7 +90,7 @@ public class SnowFlake {
     }
 
     public static void main(String[] args) {
-        SnowFlake snowFlake = new SnowFlake(2, 3);
+        SnowFlake snowFlake = new SnowFlake(1, 1);
 
         long start = System.currentTimeMillis();
         for (int i = 0; i < 100; i++) {
@@ -99,7 +98,6 @@ public class SnowFlake {
         }
 
         System.out.println(System.currentTimeMillis() - start);
-
 
     }
 }

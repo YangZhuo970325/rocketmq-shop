@@ -48,6 +48,7 @@ public class GoodsServiceImpl extends ServiceImpl<GoodsMapper, Goods> implements
         }
         //减库存
         goods.setGoodsNumber(goods.getGoodsNumber() - goodsNumberLog.getGoodsNumber());
+        goodsMapper.updateById(goods);
         
         //记录库存操作日志
         goodsNumberLog.setGoodsNumber(-(goodsNumberLog.getGoodsNumber()));

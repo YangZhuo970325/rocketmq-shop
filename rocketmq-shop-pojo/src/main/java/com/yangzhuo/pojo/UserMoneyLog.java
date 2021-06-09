@@ -36,7 +36,7 @@ public class UserMoneyLog implements Serializable {
     /**
      * 日志操作	1：订单付款	2：订单退款
      */
-    private Boolean moneyLogType;
+    private Integer moneyLogType;
 
     /**
      * 操作金额

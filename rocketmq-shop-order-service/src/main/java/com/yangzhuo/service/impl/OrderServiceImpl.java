@@ -29,7 +29,7 @@ import java.util.Date;
  * @since 2021-05-28
  */
 @Component
-@Service
+@Service(interfaceClass = OrderService.class)
 @Slf4j
 public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements OrderService {
     
@@ -58,15 +58,20 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         
         try {
             //3. 扣减库存
-            getReduceGoodsNum(order)
+            getReduceGoodsNum(order);
             
             //4. 扣减优惠券
+            updateCouponStatus(order);
             
             //5. 扣减余额
-            
+            reduceMoneyPaid(order);
+
             //6. 确认订单
+            updateOrderStatus(order);
+            log.info("订单:[" + orderId + "]确认成功");
             
             //7. 返回成功状态
+            return new Result(ShopCode.SHOP_SUCCESS.getSuccess(), ShopCode.SHOP_SUCCESS.getMessage());
             
         } catch (Exception e) {
             //1. 确认订单失败
@@ -74,6 +79,56 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             //2. 返回失败状态
         }
         return null;
+    }
+    
+    private void updateOrderStatus(Order order) {
+        order.setOrderStatus(ShopCode.SHOP_ORDER_CONFIRM.getCode());
+        order.setPayStatus(ShopCode.SHOP_ORDER_PAY_STATUS_IS_PAY.getCode());
+        order.setConfirmTime(new Date());
+        int r = orderMapper.updateById(order);
+        if (r <= 0) {
+            CastException.cast(ShopCode.SHOP_ORDER_CONFIRM_FAIL);
+        }
+        log.info("订单：" + order.getOrderId() + "确认订单成功");
+    }
+
+    /**
+     * 扣减余额
+     * @param order
+     */
+    private void reduceMoneyPaid(Order order) {
+        if (order.getMoneyPaid() != null && order.getMoneyPaid().compareTo(BigDecimal.ZERO) == 1) {
+            UserMoneyLog userMoneyLog = new UserMoneyLog();
+            userMoneyLog.setOrderId(order.getOrderId());
+            userMoneyLog.setUserId(order.getUserId());
+            userMoneyLog.setUseMoney(order.getMoneyPaid());
+            userMoneyLog.setMoneyLogType(ShopCode.SHOP_USER_MONEY_PAID.getCode());
+            Result result = userService.reduceMoneyPaid(userMoneyLog);
+            if (result.getSuccess().equals(ShopCode.SHOP_FAIL.getSuccess())) {
+                CastException.cast(ShopCode.SHOP_USER_MONEY_REDUCE_FAIL);
+            }
+            log.info("订单：" + order.getOrderId() + "，扣减余额成功");
+        }
+    }
+
+    /**
+     * 使用优惠券
+     * @param order 订单
+     */
+    private void updateCouponStatus(Order order) {
+        if (order.getCouponId() != null) {
+            Coupon coupon = couponService.getById(order.getCouponId());
+            coupon.setCouponId(order.getCouponId());
+            coupon.setIsUsed(ShopCode.SHOP_COUPON_ISUSED.getCode());
+            coupon.setUsedTime(new Date());
+            
+            //更新优惠券状态
+            Result result = couponService.updateCouponStatus(coupon);
+            if (result.getSuccess().equals(ShopCode.SHOP_FAIL.getSuccess())) {
+                CastException.cast(ShopCode.SHOP_COUPON_USE_FAIL);
+            }
+            log.info("订单：" + order.getOrderId() + "，使用优惠券");
+        }
     }
 
     /**
@@ -140,7 +195,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         if (couponId != null) {
             // 6.1 判断优惠券是否存在
             Coupon coupon = couponService.getById(couponId);
-            if (coupon != null) {
+            if (coupon == null) {
                 CastException.cast(ShopCode.SHOP_COUPON_NO_EXIST);
             }
             // 6.2 判断优惠券是否已经被使用
