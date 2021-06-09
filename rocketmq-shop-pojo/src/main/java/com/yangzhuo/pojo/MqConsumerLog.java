@@ -50,12 +50,12 @@ public class MqConsumerLog implements Serializable {
     /**
      * 0：正在处理	1：处理成功	2：处理失败
      */
-    private Boolean consumerStatus;
+    private Integer consumerStatus;
 
     /**
      * 消费次数
      */
-    private Boolean consumerTimes;
+    private Integer consumerTimes;
 
     /**
      * 消费时间

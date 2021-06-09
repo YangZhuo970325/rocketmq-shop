@@ -28,7 +28,7 @@ public class Coupon implements Serializable {
     /**
      * 优惠券id
      */
-      @TableId(value = "coupon_id", type = IdType.AUTO)
+    @TableId(value = "coupon_id", type = IdType.ASSIGN_ID)
     private Long couponId;
 
     /**

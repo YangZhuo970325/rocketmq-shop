@@ -2,19 +2,27 @@ package com.yangzhuo.service.impl;
 
 import com.alibaba.dubbo.config.annotation.Reference;
 import com.alibaba.dubbo.config.annotation.Service;
+import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.yangzhuo.api.CouponService;
 import com.yangzhuo.api.GoodsService;
 import com.yangzhuo.api.OrderService;
 import com.yangzhuo.api.UserService;
 import com.yangzhuo.constant.ShopCode;
+import com.yangzhuo.entity.MQEntity;
 import com.yangzhuo.entity.Result;
 import com.yangzhuo.exception.CastException;
 import com.yangzhuo.mapper.OrderMapper;
 import com.yangzhuo.pojo.*;
 import com.yangzhuo.utils.SnowFlake;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.rocketmq.client.exception.MQBrokerException;
+import org.apache.rocketmq.client.exception.MQClientException;
+import org.apache.rocketmq.common.message.Message;
+import org.apache.rocketmq.remoting.exception.RemotingException;
+import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -33,6 +41,12 @@ import java.util.Date;
 @Slf4j
 public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements OrderService {
     
+    @Value("${mq.order.topic}")
+    private String topic;
+    
+    @Value("${mq.order.tag.cancel}")
+    private String tag;
+    
     @Reference
     private GoodsService goodsService;
     
@@ -47,6 +61,9 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     
     @Autowired
     private OrderMapper orderMapper;
+    
+    @Autowired
+    private RocketMQTemplate rocketMQTemplate;
 
     @Override
     public Result confirmOrder(Order order) {
@@ -65,6 +82,9 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             
             //5. 扣减余额
             reduceMoneyPaid(order);
+            
+            //模拟一个下单异常
+            CastException.cast(ShopCode.SHOP_FAIL);
 
             //6. 确认订单
             updateOrderStatus(order);
@@ -75,12 +95,38 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             
         } catch (Exception e) {
             //1. 确认订单失败
-            
+            // 订单id 优惠券id 用户id 余额 商品id 商品数量
+            MQEntity mqEntity = new MQEntity();
+            mqEntity.setOrderId(orderId);
+            mqEntity.setCouponId(order.getCouponId());
+            mqEntity.setUserId(order.getUserId());
+            mqEntity.setUserMoney(order.getMoneyPaid());
+            mqEntity.setGoodsId(order.getGoodsId());
+            mqEntity.setGoodsNumber(order.getGoodsNumber());
             //2. 返回失败状态
+            try {
+                sendCancelOrder(topic, tag, order.getOrderId().toString(), JSON.toJSONString(mqEntity));
+            } catch (Exception e1) {
+                e1.printStackTrace();
+            }
+            return new Result(ShopCode.SHOP_FAIL.getSuccess(), ShopCode.SHOP_FAIL.getMessage());
         }
-        return null;
     }
-    
+
+    /**
+     * 发送 订单确认失败 消息
+     * @param topic
+     * @param tag
+     * @param keys
+     * @param body
+     */
+    private void sendCancelOrder(String topic, String tag, String keys, String body) throws InterruptedException, RemotingException, MQClientException, MQBrokerException {
+        Message message = new Message(topic, tag, keys, body.getBytes());
+        
+        rocketMQTemplate.getProducer().send(message);
+        
+    }
+
     private void updateOrderStatus(Order order) {
         order.setOrderStatus(ShopCode.SHOP_ORDER_CONFIRM.getCode());
         order.setPayStatus(ShopCode.SHOP_ORDER_PAY_STATUS_IS_PAY.getCode());
